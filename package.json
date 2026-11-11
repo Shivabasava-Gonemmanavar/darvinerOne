@@ -1,0 +1,9 @@
+{
+  "name": "workflow-hr-lms",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check src/app.js && node --check src/config/defaultData.js && node --check src/state/store.js && node --check src/utils/helpers.js && node --check src/services/authService.js && node --check src/services/attendanceService.js && node --check src/services/employeeService.js && node --check src/services/leaveService.js && node --check src/services/reportService.js && node --check src/views/layoutView.js && node --check src/views/dashboardView.js && node --check src/views/attendanceView.js && node --check src/views/leaveView.js && node --check src/views/employeeView.js && node --check src/views/reportsView.js"
+  }
+}

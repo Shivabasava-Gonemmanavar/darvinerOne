@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Darviner One</title><link rel="stylesheet" href="styles.css"></head>
+<body>
+<div id="loginScreen" class="login-screen"><div class="login-card">
+<div class="brand-center"><div class="brand-logo">D</div><h1>Darviner One</h1><p>LMS & Attendance</p></div>
+<form id="loginForm"><label>Email</label><input id="email" type="email" placeholder="Enter email" required>
+<label>Password</label><input id="password" type="password" placeholder="Enter password" required>
+<button class="btn btn-primary login-btn">Sign In</button></form>
+<div class="demo-box"><strong>Demo Accounts</strong>
+<div>Employee: rahul@company.com / 123456</div><div>Manager: priya@company.com / 123456</div><div>Admin: shiva@company.com / 123456</div></div>
+<p id="loginError" class="error-text"></p></div></div>
+<div id="appShell" class="app-shell hidden"><aside class="sidebar" id="sidebar">
+<div class="brand"><div class="brand-logo">W</div><div><h2>WorkFlow HR</h2><span>LMS & Attendance</span></div></div>
+<nav id="navigation"></nav><div class="sidebar-bottom"><button class="nav-item" id="logoutBtn">↪ <span>Logout</span></button>
+<div class="user-mini"><div class="avatar" id="sideAvatar">SG</div><div><strong id="sideName">Shiva</strong><small id="sideRole">Admin</small></div></div></div></aside>
+<main class="main"><header class="topbar"><button class="menu-btn" id="menuBtn">☰</button>
+<div class="top-title"><h1 id="pageTitle">Dashboard</h1><p id="pageSubtitle">Overview</p></div>
+<div class="top-actions"><div class="user-menu-wrap"><button class="top-user" id="topUser" type="button" aria-expanded="false"><div class="avatar" id="topAvatar">SG</div><span id="topName">Shiva</span><span class="user-caret">⌄</span></button><div class="user-dropdown hidden" id="userDropdown"><button type="button" onclick="setPage('profile');closeUserMenu()">My Profile</button><button type="button" onclick="logout()">Logout</button></div></div></div></header>
+<section class="content" id="app"></section></main></div>
+<div class="modal-backdrop hidden" id="modalBackdrop"><div class="modal" id="modal"></div></div>
+<div class="toast-container" id="toastContainer"></div>
+<script type="module" src="./src/app.js"></script>
+</body></html>
