@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WorkFlow HR — Full-Stack Architecture Guide</title>
+<style>
+@page { size: A4; margin: 17mm 16mm 18mm; }
+* { box-sizing: border-box; }
+body { font: 10.2pt/1.48 "Segoe UI", Arial, sans-serif; color: #182230; margin: 0; }
+h1,h2,h3 { color: #173b67; line-height: 1.2; }
+h1 { font-size: 27pt; margin: 0 0 9pt; }
+h2 { font-size: 18pt; margin: 23pt 0 8pt; border-bottom: 1.5pt solid #d6e2f0; padding-bottom: 5pt; }
+h3 { font-size: 12.5pt; margin: 14pt 0 4pt; }
+p { margin: 4pt 0 8pt; }
+ul,ol { margin: 4pt 0 10pt 20pt; padding: 0; }
+li { margin: 2pt 0; }
+code { font: 9pt Consolas, "Courier New", monospace; color: #134b73; background: #f1f5f9; padding: 1px 3px; }
+pre { white-space: pre-wrap; font: 8.7pt/1.4 Consolas, "Courier New", monospace; background: #f3f6fa; border-left: 3pt solid #4677a8; padding: 9pt 11pt; margin: 7pt 0 11pt; }
+table { width: 100%; border-collapse: collapse; margin: 7pt 0 12pt; font-size: 9.2pt; }
+th { background: #e8f0f8; color: #173b67; text-align: left; }
+th,td { border: .6pt solid #cbd5e1; padding: 5pt 6pt; vertical-align: top; }
+.cover { min-height: 250mm; padding-top: 42mm; page-break-after: always; }
+.eyebrow { color: #4f6f91; letter-spacing: 2px; text-transform: uppercase; font-size: 9pt; font-weight: 700; }
+.subtitle { font-size: 15pt; color: #52657a; max-width: 145mm; }
+.coverbox { margin-top: 28mm; padding: 16pt; background: #eef4fa; border-left: 5pt solid #3a6d9f; }
+.small { color: #5f6e7e; font-size: 8.8pt; }
+.callout { background: #f1f7fb; border: 1pt solid #c9dceb; border-radius: 4pt; padding: 8pt 10pt; margin: 8pt 0 12pt; }
+.warn { background: #fff8e9; border-color: #ead7a7; }
+.diagram { background: #f5f8fb; border: 1pt solid #cbd8e5; padding: 10pt; margin: 8pt 0 12pt; font: 9pt/1.5 Consolas, monospace; white-space: pre-wrap; }
+.flow { display: flex; align-items: stretch; gap: 6pt; margin: 10pt 0; }
+.flow div { flex: 1; border: 1pt solid #b9cde0; background: #f2f7fc; padding: 8pt; text-align: center; border-radius: 4pt; }
+.flow b { display: block; color: #173b67; margin-bottom: 3pt; }
+.arrow { flex: 0 0 auto !important; border: 0 !important; background: transparent !important; align-self: center; font-size: 17pt; color: #4f6f91; padding: 0 !important; }
+.page { page-break-before: always; }
+.keep { break-inside: avoid; page-break-inside: avoid; }
+.toc li { margin: 5pt 0; }
+.badge { display: inline-block; background: #dceaf7; color: #173b67; padding: 2pt 6pt; border-radius: 10pt; font-size: 8.5pt; }
+.footer { margin-top: 20pt; border-top: 1pt solid #d6e2f0; padding-top: 5pt; color: #708090; font-size: 8pt; }
+@media print { a { color: inherit; text-decoration: none; } h2,h3 { break-after: avoid; } tr,pre,.callout,.diagram { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<section class="cover">
+  <div class="eyebrow">Project learning guide • November 2026</div>
+  <h1>WorkFlow HR<br>Full-Stack Architecture</h1>
+  <p class="subtitle">A code-based walkthrough of how the browser, JavaScript modules, Express API, MySQL database, sessions, and uploaded files fit together.</p>
+  <div class="coverbox">
+    <h3>What you will understand</h3>
+    <p>How a click in the UI becomes an HTTP request, how the API authenticates and authorizes it, how prepared SQL reads or writes MySQL, how the response updates the page, and where persistent data is stored.</p>
+    <p class="small">This guide describes the project in this repository. It is not a generic HR-system design. Secrets and real passwords are intentionally excluded.</p>
+  </div>
+  <p style="margin-top:36mm"><span class="badge">Frontend</span> <span class="badge">Backend/API</span> <span class="badge">MySQL</span> <span class="badge">Security</span> <span class="badge">Run & debug</span></p>
+</section>
+
+<h2>1. The application in one picture</h2>
+<p>WorkFlow HR is a same-origin web application: Express serves the browser files and its API from the same Node.js process. The browser does not connect to MySQL. Only the backend has database credentials.</p>
+<div class="diagram">PERSON
+  │ uses
+  ▼
+Browser: index.html + styles.css + ES modules in src/
+  │ fetch('/api/v1/...') + session cookie
+  ▼
+Express server: middleware → authentication → role/scope checks → route handler
+  │ mysql2 prepared query / transaction
+  ▼
+MySQL: workflow_hr tables
+
+Related persistence:
+  express-session ── session ID cookie ── MySQLSessionStore ── web_sessions
+  Uploaded documents ── server/uploads/ (private local filesystem in this version)
+</div>
+<p>The browser keeps a temporary in-memory copy of the records currently displayed. MySQL is the durable source of truth. Refreshing the page reloads records from the API; it does not restore them from localStorage.</p>
+
+<h2>2. Technologies and what each one does</h2>
+<table><thead><tr><th>Technology</th><th>Where it appears</th><th>Job in this project</th></tr></thead><tbody>
+<tr><td>HTML5</td><td><code>index.html</code></td><td>Login form, page shell, navigation containers, modal containers, and browser entry point.</td></tr>
+<tr><td>CSS</td><td><code>styles.css</code></td><td>Layout, responsive behavior, cards, forms, tables, modals, and visual states.</td></tr>
+<tr><td>Vanilla JavaScript ES modules</td><td><code>src/</code></td><td>UI rendering, event handlers, client-side state, and calls to the API. No React, Vue, or frontend compiler is used.</td></tr>
+<tr><td>Node.js 20+</td><td><code>server/src/</code></td><td>JavaScript runtime for the server, database scripts, password hashing, and uploads.</td></tr>
+<tr><td>Express 4</td><td><code>server/src/index.js</code></td><td>HTTP server, static-file routes, API routes, middleware, and error handling.</td></tr>
+<tr><td>mysql2/promise</td><td><code>server/src/db.js</code></td><td>Promise-based MySQL connection pool and parameterized SQL queries.</td></tr>
+<tr><td>MySQL 8 / InnoDB</td><td><code>server/schema.sql</code></td><td>Durable relational records, unique keys, foreign keys, indexes, and transactions.</td></tr>
+<tr><td>express-session</td><td>Express middleware</td><td>Stores a server-side login session; the browser receives only a session identifier cookie.</td></tr>
+<tr><td>Custom MySQL session store</td><td><code>server/src/mysqlSessionStore.js</code></td><td>Stores and expires session records in the <code>web_sessions</code> table.</td></tr>
+<tr><td>bcryptjs</td><td>Login and account creation</td><td>Hashes passwords with bcrypt; plaintext passwords are not stored in MySQL.</td></tr>
+<tr><td>Zod</td><td>API write routes</td><td>Checks request fields, formats, and limits before the server writes data.</td></tr>
+<tr><td>Helmet</td><td>Express middleware</td><td>Adds common HTTP security headers. This project explicitly disables Helmet's Content Security Policy.</td></tr>
+<tr><td>express-rate-limit</td><td>Login route</td><td>Limits login attempts to 10 per 15-minute window per limiter key.</td></tr>
+<tr><td>Multer</td><td>Payslip upload route</td><td>Parses multipart file uploads, accepts PDF uploads, and applies a configured size limit.</td></tr>
+<tr><td>dotenv</td><td>Server startup scripts</td><td>Loads local values from <code>server/.env</code>. Production hosts should supply environment variables directly.</td></tr>
+</tbody></table>
+
+<h2>3. Frontend: what happens in the browser</h2>
+<h3>3.1 Entry and modules</h3>
+<p><code>index.html</code> loads <code>styles.css</code> and starts <code>src/app.js</code> as a native JavaScript module. The main module imports controllers, services, shared state, and HTML helpers. The browser renders pages by updating DOM elements; it is not a server-rendered React application.</p>
+<table><thead><tr><th>Frontend area</th><th>Responsibility</th><th>Representative files</th></tr></thead><tbody>
+<tr><td>Application entry</td><td>Registers browser globals needed by inline controls, binds authentication events, checks whether a session already exists.</td><td><code>src/app.js</code></td></tr>
+<tr><td>State</td><td>Holds current employee/leave/attendance data, session identity, and active page in memory.</td><td><code>src/state/store.js</code></td></tr>
+<tr><td>API client</td><td>Calls same-origin endpoints, includes cookies, parses JSON, handles errors and 401 sign-out behavior, refreshes bootstrap data.</td><td><code>src/services/apiClient.js</code></td></tr>
+<tr><td>Domain services</td><td>Small functions for login, employees, attendance, leave, and reports; they call the shared API client.</td><td><code>src/services/*Service.js</code></td></tr>
+<tr><td>Controllers</td><td>Connect clicks/forms to service calls and then render or refresh a view.</td><td><code>src/controllers/*Controller.js</code></td></tr>
+<tr><td>Views</td><td>Render common layout, dashboard, attendance, leave, employee, reports, tickets, and payslips UI.</td><td><code>src/views/*View.js</code></td></tr>
+<tr><td>Helpers</td><td>DOM lookup, safe text escaping, toast messages, formatting helpers.</td><td><code>src/utils/helpers.js</code></td></tr>
+</tbody></table>
+<h3>3.2 Browser startup and login</h3>
+<ol>
+<li>The browser loads HTML, CSS, and JavaScript.</li>
+<li><code>src/app.js</code> calls <code>GET /api/v1/auth/me</code>.</li>
+<li>If the server recognizes the session cookie, the UI loads <code>GET /api/v1/bootstrap</code>, fills in-memory state, and shows the app shell.</li>
+<li>If there is no valid session, the login screen remains visible.</li>
+<li>Submitting the login form calls <code>POST /api/v1/auth/login</code>. On success, bootstrap data is fetched and the UI renders navigation for the user’s role.</li>
+</ol>
+<h3>3.3 Client state is a cache, not the database</h3>
+<p><code>state.data</code> contains arrays such as employees, leaves, holidays, attendance, payslips, and tickets. A successful write usually calls <code>refreshBootstrap()</code> and re-renders. Closing or refreshing the browser loses this in-memory copy, but not committed MySQL data. Compatibility functions named <code>saveData</code>, <code>saveUsers</code>, and <code>saveSession</code> intentionally do nothing.</p>
+
+<h2>4. API and backend: how requests are handled</h2>
+<h3>4.1 One normal request</h3>
+<div class="diagram">Button/form event
+  → controller calls a domain service
+  → apiClient.fetch('/api/v1/...', { credentials: 'include' })
+  → Express parses JSON or multipart form data
+  → session middleware reads workflow.sid and loads web_sessions row
+  → requireAuth reloads active user + employee from MySQL
+  → attachDepartment loads the employee's department for scope checks
+  → route validates input and checks role / record scope
+  → mysql2 executes prepared SQL (or a transaction)
+  → JSON response / file stream
+  → service refreshes browser state and controller re-renders</div>
+<h3>4.2 Middleware order and common behavior</h3>
+<ul>
+<li>Express disables the <code>X-Powered-By</code> header, applies Helmet headers, then parses JSON (up to 15 MB) and URL-encoded bodies (up to 2 MB).</li>
+<li>Session middleware is installed before application routes. The session cookie is named <code>workflow.sid</code>, HttpOnly, SameSite=Lax, expires after 8 hours, and is Secure in production.</li>
+<li><code>asyncRoute</code> forwards rejected async handlers to common error middleware. API errors generally return JSON like <code>{"error":{"message":"..."}}</code>.</li>
+<li><code>fail()</code> creates consistent API errors. Unmatched versioned API routes return 404.</li>
+<li><code>/api/health</code> runs <code>SELECT 1</code>. It confirms the server can reach MySQL, but does not verify every schema table or complete business workflow.</li>
+</ul>
+<h3>4.3 API route map</h3>
+<table><thead><tr><th>Endpoint</th><th>Purpose</th><th>Access notes</th></tr></thead><tbody>
+<tr><td><code>GET /api/health</code></td><td>Server/database health check.</td><td>Public; checks a simple SQL query.</td></tr>
+<tr><td><code>POST /api/v1/auth/login</code></td><td>Validate email/password, create session, record login.</td><td>Public; rate-limited; bcrypt comparison.</td></tr>
+<tr><td><code>POST /api/v1/auth/logout</code></td><td>Audit and destroy current session.</td><td>Clears the session cookie.</td></tr>
+<tr><td><code>GET /api/v1/auth/me</code></td><td>Return current identity when session is valid.</td><td>Authenticated.</td></tr>
+<tr><td><code>GET /api/v1/bootstrap</code></td><td>Initial client data: scoped employees, leaves, attendance, holidays, payslips, tickets.</td><td>Authenticated; scope differs by role.</td></tr>
+<tr><td><code>/api/v1/employees</code></td><td>List, create, edit, deactivate employees/accounts.</td><td>List is scoped; create/deactivate Admin only; edit checks role and manager department.</td></tr>
+<tr><td><code>/api/v1/attendance</code></td><td>Read attendance records and report data.</td><td>Authenticated and role-scoped.</td></tr>
+<tr><td><code>POST /api/v1/attendance/check-in|check-out</code></td><td>Mark today’s check-in or close an open record.</td><td>Uses current employee identity from the session.</td></tr>
+<tr><td><code>/api/v1/leaves</code></td><td>List and submit leave requests.</td><td>Rows are scoped; server recalculates working days.</td></tr>
+<tr><td><code>POST /api/v1/leaves/:id/approve|reject</code></td><td>Review a pending request.</td><td>Manager/Admin; managers restricted to department.</td></tr>
+<tr><td><code>/api/v1/holidays</code></td><td>List company holidays; add a holiday.</td><td>Add is Admin only.</td></tr>
+<tr><td><code>/api/v1/tickets</code></td><td>List/create tickets; change ticket status.</td><td>List scoped; status change Manager/Admin with department check.</td></tr>
+<tr><td><code>/api/v1/payslips</code></td><td>List metadata, upload PDF, download, or delete.</td><td>Downloads verify employee ownership; upload/delete Admin only.</td></tr>
+<tr><td><code>GET /api/v1/dashboard/summary</code></td><td>Counts active employees, today’s attendance, pending leave, holidays.</td><td>Role-scoped where applicable.</td></tr>
+<tr><td><code>GET /api/v1/reports/attendance?month=YYYY-MM</code></td><td>Return month’s attendance rows.</td><td>Role-scoped; month format validated.</td></tr>
+</tbody></table>
+
+<h2>5. Authentication, sessions, roles, and security</h2>
+<h3>Password and session lifecycle</h3>
+<ol>
+<li>The seed script or Admin employee-creation route hashes a password using <code>bcryptjs</code> with cost factor 12, then writes only the hash into <code>users.password_hash</code>.</li>
+<li>Login looks up a user by normalized email, requires both active user and active employee, then uses <code>bcrypt.compare</code>.</li>
+<li>After success, Express regenerates the session ID to reduce session-fixation risk and stores the user’s numeric <code>users.id</code> as <code>req.session.userId</code>.</li>
+<li>The browser receives only an HttpOnly session cookie. The session body remains server-side in <code>web_sessions</code>.</li>
+<li>On protected API requests the server reloads the user and employee; a disabled user or inactive employee is rejected even if an old cookie exists.</li>
+<li>Logout destroys the database session and clears the cookie.</li>
+</ol>
+<h3>Roles and scope</h3>
+<table><thead><tr><th>Role</th><th>Typical visibility/actions</th><th>Where enforced</th></tr></thead><tbody>
+<tr><td>Employee</td><td>Own employee profile, attendance, leave, tickets, and payslips.</td><td>Backend SQL filters by current employee ID; UI also hides management navigation.</td></tr>
+<tr><td>Manager</td><td>Department-level team records and approvals; cannot manage the whole company.</td><td>Backend checks department ID on reads and protected writes.</td></tr>
+<tr><td>Admin</td><td>Company-wide management, accounts, holidays, payslip uploads and deletes.</td><td>Backend role middleware and per-route rules.</td></tr>
+</tbody></table>
+<div class="callout"><b>Important:</b> Hiding a button in JavaScript is not security. The API is the security boundary. This project does server-side role and scope checks on protected routes.</div>
+<p>Other protections include parameterized SQL, Zod request validation, a login rate limit, upload type/size checks, a private uploads directory, production session-secret length enforcement, and Helmet headers. The Content Security Policy is disabled in code, so it is not one of the protections currently provided.</p>
+
+<h2>6. MySQL data model and relationships</h2>
+<p>The application uses raw SQL with <code>mysql2</code>, not an ORM. IDs are generally <code>BIGINT UNSIGNED</code>. The API converts database rows into smaller browser-facing objects so internal columns such as password hashes are not returned.</p>
+<div class="diagram">departments 1 ─── * employees 1 ─── 1 users
+                         │                 │
+                         ├── * attendance  │
+                         ├── * leave_requests (reviewer_id → users.id)
+                         ├── * payslips       (uploaded_by → users.id)
+                         ├── * tickets        (assigned_to → users.id)
+                         └── * audit_logs     (actor_user_id → users.id)
+
+holidays.created_by ───────────────→ users.id
+web_sessions is separate: session_id → serialized session body + expiry</div>
+<table><thead><tr><th>Table</th><th>What it stores</th><th>Key relationships / rules</th></tr></thead><tbody>
+<tr><td><code>departments</code></td><td>Unique department names and creation time.</td><td>One department can have many employees.</td></tr>
+<tr><td><code>employees</code></td><td>Employee code, identity/contact fields, department, business role/status, leave balance, timestamps.</td><td>Employee code and email unique; department foreign key; status Active/Inactive.</td></tr>
+<tr><td><code>users</code></td><td>Login email, password hash, role, active flag, last login.</td><td>One user per employee; separate from HR employee profile.</td></tr>
+<tr><td><code>web_sessions</code></td><td>Session ID, expiry timestamp, serialized session data.</td><td>Used by Express session middleware; expired rows are periodically deleted.</td></tr>
+<tr><td><code>attendance</code></td><td>Employee, work date, status, check-in/out timestamps.</td><td>Unique employee/date prevents duplicate daily check-ins.</td></tr>
+<tr><td><code>holidays</code></td><td>Unique holiday date, name, creator user, creation time.</td><td>Holiday dates are used while calculating working leave days.</td></tr>
+<tr><td><code>leave_requests</code></td><td>Leave type/date range, working/paid/LOP days, reason, optional document metadata, status, reviewer.</td><td>Employee and reviewer foreign keys; status Pending/Approved/Rejected.</td></tr>
+<tr><td><code>payslips</code></td><td>Employee, month, private file storage key, original filename, uploader.</td><td>One payslip per employee/month; PDF itself is not stored in MySQL.</td></tr>
+<tr><td><code>tickets</code></td><td>Employee issue subject/description, priority, status, assignee and timestamps.</td><td>Priority Low/Normal/High; status Open/In Progress/Resolved.</td></tr>
+<tr><td><code>audit_logs</code></td><td>Actor, action, entity, entity ID, optional JSON details, time.</td><td>Records significant actions such as login, leave review, payslip changes.</td></tr>
+</tbody></table>
+<h3>Two different employee identifiers</h3>
+<p>MySQL uses numeric <code>employees.id</code> for foreign keys. The UI/API commonly displays the human-readable <code>employee_code</code> such as EMP001. Keep them distinct: the API converts DB IDs into employee codes for employee lists, while attendance/payslip rows have their own numeric record IDs.</p>
+
+<h2>7. The main business flows</h2>
+<h3>Employee creation</h3>
+<p>An Admin submits an employee form. The API validates fields, begins a MySQL transaction, creates or reuses the department, inserts the employee, hashes the initial password, inserts the linked login user, and commits. Duplicate employee code or email returns a conflict response. A failed transaction rolls back both records.</p>
+<h3>Attendance</h3>
+<p>The server computes the current calendar date in <code>Asia/Kolkata</code>. It marks a check-in Late after 09:45 India local time; otherwise Present. The persisted event timestamp is UTC. A unique employee/date key prevents a second check-in. Check-out updates only an existing open row for today. API view helpers convert dates and times for the browser.</p>
+<h3>Leave application and approval</h3>
+<ol>
+<li>The browser can preview working days using weekdays and the currently loaded holiday list.</li>
+<li>The server independently validates the leave type, dates, reason, and document. It queries holidays in the requested range and recalculates the weekday count; the client is not trusted for the final count.</li>
+<li>The server compares requested days with the current leave balance. Paid days and loss-of-pay (LOP) days are stored separately. A Paid Leave request with insufficient balance is rejected.</li>
+<li>Sick leave longer than three working days requires a PDF/PNG/JPEG. The server checks the file signature as well as the data URL type and writes the document to the private uploads folder.</li>
+<li>A Manager/Admin approval starts a transaction, locks the leave row with <code>FOR UPDATE</code>, checks Pending status and department scope, deducts paid days only on approval, updates reviewer/status, then commits.</li>
+</ol>
+<h3>Holidays, tickets, reports, payslips</h3>
+<ul>
+<li><b>Holidays:</b> Admin creates a unique date; holidays affect leave-day calculations.</li>
+<li><b>Tickets:</b> an employee creates a ticket; Manager/Admin can change its status, with managers limited to their department.</li>
+<li><b>Attendance reports:</b> server returns month-filtered rows and role scope; browser builds a downloadable Excel-compatible HTML file with an <code>.xls</code> extension.</li>
+<li><b>Leave reports:</b> built in the browser from bootstrap data. Manager scope is assembled client-side using employee names/departments in the loaded data.</li>
+<li><b>Payslips:</b> Admin uploads a PDF; Multer stores it in <code>server/uploads/payslips</code>, the server checks the PDF signature, and MySQL stores its metadata/path. Downloads check that a non-Admin owns the payslip before sending it. The uploads directory must never be exposed as public static content.</li>
+</ul>
+
+<h2>8. How setup and startup work</h2>
+<table><thead><tr><th>Step</th><th>Command/action</th><th>What it does</th></tr></thead><tbody>
+<tr><td>Install</td><td><code>npm install</code></td><td>Installs dependencies from package.json/package-lock.json.</td></tr>
+<tr><td>Configure</td><td>Copy <code>server/.env.example</code> to <code>server/.env</code></td><td>Supplies local port, session secret, MySQL host/database/users/passwords, upload location and size limit.</td></tr>
+<tr><td>Start MySQL</td><td>Docker Compose or installed MySQL 8</td><td>MySQL must listen at the host/port in server/.env.</td></tr>
+<tr><td>Create schema</td><td><code>npm run db:migrate</code></td><td>Reads <code>server/schema.sql</code> and runs its CREATE DATABASE/USE/CREATE TABLE statements using DB_ADMIN credentials.</td></tr>
+<tr><td>First account</td><td><code>npm run db:seed-admin -- EMP001 "Name" admin@example.com Administration</code></td><td>Prompts for a hidden 12+ character password; inserts department, employee and hashed Admin login.</td></tr>
+<tr><td>Run server</td><td><code>npm start</code></td><td>Loads server/.env, creates upload folder, installs middleware/routes, and listens on PORT or 3000.</td></tr>
+<tr><td>Open app</td><td><code>http://localhost:3000</code></td><td>Browser downloads static frontend files from Express.</td></tr>
+</tbody></table>
+<p>PowerShell may use <code>npm.cmd</code> if the script policy blocks <code>npm</code>. Run SQL statements in MySQL Workbench, not in a normal PowerShell or Bash prompt.</p>
+
+<h2>9. Configuration and important boundaries</h2>
+<ul>
+<li><code>PORT</code>: server listening port; default 3000.</li>
+<li><code>APP_ORIGIN</code>: documented local/production origin value; inspect route code before assuming every environment variable is actively used.</li>
+<li><code>SESSION_SECRET</code>: signs session cookies. Production requires at least 32 characters.</li>
+<li><code>DB_HOST</code>, <code>DB_PORT</code>, <code>DB_NAME</code>, <code>DB_USER</code>, <code>DB_PASSWORD</code>: runtime MySQL connection.</li>
+<li><code>DB_ADMIN_USER</code>, <code>DB_ADMIN_PASSWORD</code>: elevated credentials used by migration and must be protected.</li>
+<li><code>UPLOAD_DIR</code>, <code>MAX_UPLOAD_MB</code>: local private storage location and payslip upload limit.</li>
+<li><code>.env</code> and uploaded files are ignored by Git. Never commit production secrets, real payroll files, or local DB credentials.</li>
+</ul>
+<div class="callout warn"><b>Local versus live:</b> Local MySQL at <code>127.0.0.1</code> is only reachable on the local computer. A Vercel deployment cannot use that address to reach your Windows machine. A live deployment also needs a network-accessible production database, production environment variables, and durable private file storage; the current local upload folder is not production-grade durable storage.</div>
+
+<h2>10. Source-code map</h2>
+<table><thead><tr><th>Path</th><th>Read it when you want to understand…</th></tr></thead><tbody>
+<tr><td><code>index.html</code>, <code>styles.css</code></td><td>Browser shell and visual styling.</td></tr>
+<tr><td><code>src/app.js</code></td><td>Frontend startup, global event wiring, holiday/report actions.</td></tr>
+<tr><td><code>src/services/apiClient.js</code></td><td>HTTP requests, cookies, JSON/error handling, bootstrap refresh.</td></tr>
+<tr><td><code>src/controllers/</code></td><td>UI actions and page behavior.</td></tr>
+<tr><td><code>src/services/</code></td><td>Frontend domain operations that call API endpoints.</td></tr>
+<tr><td><code>src/views/</code></td><td>Reusable layout and feature view rendering.</td></tr>
+<tr><td><code>src/state/store.js</code></td><td>In-memory UI state; no DB persistence.</td></tr>
+<tr><td><code>server/src/index.js</code></td><td>Express middleware, authentication, every API route, business rules, upload handling, and static routes.</td></tr>
+<tr><td><code>server/src/db.js</code></td><td>MySQL pool and audit insert helper.</td></tr>
+<tr><td><code>server/src/mysqlSessionStore.js</code></td><td>Database-backed Express session get/set/delete/expiry cleanup.</td></tr>
+<tr><td><code>server/schema.sql</code></td><td>Database schema, indexes, unique constraints, and foreign keys.</td></tr>
+<tr><td><code>server/src/migrate.js</code></td><td>Applies the initial schema from the command line.</td></tr>
+<tr><td><code>server/src/seed-admin.js</code></td><td>Creates the first Admin identity and hashes its password.</td></tr>
+<tr><td><code>package.json</code></td><td>Runtime dependencies and start/check/migration/seed scripts.</td></tr>
+</tbody></table>
+
+<h2>11. Troubleshooting by symptom</h2>
+<table><thead><tr><th>Message/symptom</th><th>Meaning</th><th>Next check</th></tr></thead><tbody>
+<tr><td><code>EADDRINUSE :::3000</code></td><td>Another process already owns port 3000. Often that is the app already running.</td><td>Open localhost:3000. To restart, stop the old server with Ctrl+C in its terminal before starting another.</td></tr>
+<tr><td><code>ECONNREFUSED 127.0.0.1:3306</code></td><td>No MySQL service accepted the connection at that address/port.</td><td>Check MySQL/Docker is running, listening on 3306, and DB_HOST/DB_PORT are correct.</td></tr>
+<tr><td><code>ER_ACCESS_DENIED_ERROR</code></td><td>MySQL rejected the username/password or host grant.</td><td>Check DB_USER/DB_PASSWORD or DB_ADMIN_USER/DB_ADMIN_PASSWORD separately; do not paste secrets into chat.</td></tr>
+<tr><td><code>Table ... does not exist</code></td><td>The schema migration did not finish, or app points at another database.</td><td>Run db:migrate with the correct DB_ADMIN connection; verify the Workbench schema is workflow_hr.</td></tr>
+<tr><td>Foreign-key columns incompatible</td><td>An existing table was created with an older/different column type.</td><td>Compare SHOW CREATE TABLE with server/schema.sql. Back up/rename legacy tables before recreating the app schema.</td></tr>
+<tr><td><code>Duplicate entry ... employee_code</code></td><td>The employee code already exists; the seed script always inserts a new employee.</td><td>Inspect existing employees/users before choosing a unique code. A duplicate seed attempt does not reset a password.</td></tr>
+<tr><td>Login rejected</td><td>Email/password mismatch, inactive user, inactive employee, or wrong database.</td><td>Check user is_active, employee status, and email; passwords are bcrypt hashes and cannot be read back.</td></tr>
+<tr><td>Page loads but API fails</td><td>Static frontend can load even when DB/schema/session access is broken.</td><td>Open <code>/api/health</code>, then inspect server terminal logs and session/database configuration.</td></tr>
+</tbody></table>
+
+<h2>12. Learning path: trace one feature end to end</h2>
+<ol>
+<li>Pick a button in a view/controller, for example check-in in <code>src/controllers/dashboardController.js</code>.</li>
+<li>Follow the service it calls, such as <code>src/services/attendanceService.js</code>.</li>
+<li>Find the API path passed to <code>api()</code> and note the HTTP method/body.</li>
+<li>Find the matching Express route in <code>server/src/index.js</code>.</li>
+<li>Trace its middleware: session, authentication, department attachment, and role checks.</li>
+<li>Read the SQL statement and identify its table, key, and transaction behavior.</li>
+<li>Find the JSON response shape; compare it with the frontend state/view fields.</li>
+<li>Check the schema constraint that protects the data (for example, the unique employee/date attendance key).</li>
+</ol>
+<div class="callout"><b>Best mental model:</b> UI code improves usability; API code owns validation, identity, permissions, and business rules; MySQL constraints protect persisted relationships and uniqueness. Follow the request from the button to the SQL and back to the rendered state.</div>
+
+<h2>Glossary</h2>
+<table><thead><tr><th>Term</th><th>Plain-language meaning</th></tr></thead><tbody>
+<tr><td>Frontend</td><td>Code running in the user’s browser: HTML, CSS, and JavaScript.</td></tr>
+<tr><td>Backend</td><td>Server-side Node.js/Express code that receives requests and applies rules.</td></tr>
+<tr><td>API</td><td>A defined set of HTTP routes the browser uses to ask the backend to read/change data.</td></tr>
+<tr><td>Middleware</td><td>Reusable code that runs before a route, for example body parsing or session authentication.</td></tr>
+<tr><td>Session</td><td>Server-held sign-in state associated with a browser cookie.</td></tr>
+<tr><td>Prepared query</td><td>SQL where values are supplied separately from SQL text, reducing SQL injection risk.</td></tr>
+<tr><td>Foreign key</td><td>A database rule that keeps a reference pointing to a real row in another table.</td></tr>
+<tr><td>Transaction</td><td>A group of database changes committed together or rolled back together.</td></tr>
+<tr><td>LOP</td><td>Loss of pay days: working days requested beyond paid leave balance.</td></tr>
+<tr><td>Source of truth</td><td>The system holding the durable authoritative value; here it is MySQL for business records.</td></tr>
+</tbody></table>
+<p class="footer">Prepared from the repository’s current code and README. Validation snapshot: syntax check passed, initial MySQL migration succeeded, and the local homepage/database health endpoint responded successfully. The project’s README lists tickets/policies and several HR policy decisions as unfinished scope.</p>
+</body></html>
