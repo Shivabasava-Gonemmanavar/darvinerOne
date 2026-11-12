@@ -27,6 +27,12 @@ export function buildNavigation() {
     button.onclick = () => {
       const { setPage } = window;
       if (typeof setPage === 'function') setPage(button.dataset.page);
+
+      // Keep the selected page visible after navigating from the mobile drawer.
+      if (window.matchMedia('(max-width: 760px)').matches) {
+        const sidebar = $('sidebar');
+        if (sidebar) sidebar.classList.remove('open');
+      }
     };
   });
 
