@@ -82,7 +82,7 @@ export function openLeave() {
       });
     }
 
-    const result = applyLeave({ employee: employeeName, type, from, to, reason, documentName, documentData });
+    const result = await applyLeave({ type, from, to, reason, documentName, documentData });
     if (!result.ok) {
       toast(result.message);
       return;
@@ -109,8 +109,8 @@ export function updateSickDocumentRequirement() {
   if (group) group.classList.toggle('hidden', !required);
   if (input) input.required = required;
 }
-export function decision(leaveId, status) {
-  const result = updateLeaveDecision(leaveId, status);
+export async function decision(leaveId, status) {
+  const result = await updateLeaveDecision(leaveId, status);
   if (!result.ok) {
     toast(result.message);
     return;

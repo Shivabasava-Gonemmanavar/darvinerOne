@@ -1,0 +1,50 @@
+﻿<html><head><meta charset="utf-8"><title>WorkFlow HR Architecture</title><style>body{font-family:Arial;color:#26344a;margin:42px;font-size:11pt}h1{color:#243f70;border-bottom:2px solid #148b82;padding-bottom:5px}h2{color:#148b82}table{border-collapse:collapse;width:100%;margin:12px 0 20px}td,th{border:1px solid #ced8e8;padding:9px;text-align:left}th{background:#243f70;color:white}.box{background:#eef4fc;border:2px solid #2a63be;border-radius:12px;padding:15px;text-align:center;font-weight:bold;color:#243f70}.api{background:#e9f7f5;border-color:#148b82}.db{background:#f2eef9;border-color:#6f52b0}.arrow{text-align:center;font-size:24px;color:#148b82}.note{background:#f3f6fb;padding:12px;border-left:4px solid #148b82}</style></head><body>
+<h1>WORKFLOW HR</h1><h2>Frontend to Backend + MySQL</h2><p>A clear architecture and implementation guide for this project · 12 November 2026</p>
+<div class="note"><b>Recommendation:</b> Keep the current vanilla JavaScript frontend. Add a Node.js + Express + TypeScript API, connect it to MySQL using Prisma, and keep every database connection on the server.</div>
+<h1>1. What exists today</h1><p>This project has modular browser views, controllers and services for employees, attendance, leave, payslips and reports. Data and demo login are stored in browser code/localStorage. The README describes the project as a frontend demo.</p>
+<h1>2. Architecture design</h1>
+<table><tr><td class="box">BROWSER UI<br>Existing HTML/CSS + vanilla JS<br>Views · Controllers · API client<br>No DB password</td><td class="arrow">HTTPS / JSON →</td><td class="box api">NODE.JS API<br>Express + TypeScript<br>Login · Validation · Permissions<br>Business rules · Audit logs</td><td class="arrow">Prisma →</td><td class="box db">MYSQL<br>Users · Employees<br>Attendance · Leave<br>Holidays · Payslip metadata</td></tr></table>
+<table><tr><th>Identity + security</th><th>Private file storage</th><th>Operations</th></tr><tr><td>Secure session cookie<br>Role + record scope checks<br>Rate limits + audit trail</td><td>PDFs in private bucket<br>MySQL keeps metadata only<br>Short-lived downloads</td><td>HTTPS hosting<br>Secrets + backups<br>Logs + monitoring</td></tr></table>
+<p><b>Example flow:</b> employee submits leave → POST /api/v1/leaves → API validates identity, dates and rules → MySQL saves request → API returns result → UI refreshes from API.</p>
+<h1>3. Framework recommendation</h1>
+<table><tr><th>Layer</th><th>Choice</th><th>Reason</th></tr>
+<tr><td>Frontend</td><td>Keep vanilla JavaScript</td><td>Fastest integration; no rewrite required.</td></tr>
+<tr><td>Backend</td><td>Node.js LTS + Express + TypeScript</td><td>Same language family; lightweight REST API.</td></tr>
+<tr><td>Database access</td><td>Prisma ORM + Prisma Migrate</td><td>Typed queries and repeatable schema changes.</td></tr>
+<tr><td>Database</td><td>MySQL 8.x</td><td>Relational fit for HR records.</td></tr>
+<tr><td>Validation</td><td>Zod or equivalent</td><td>Reject invalid input before database writes.</td></tr>
+<tr><td>Authentication</td><td>Server-managed session in Secure, HttpOnly cookie</td><td>Cookie is hidden from browser JavaScript and can be revoked.</td></tr>
+<tr><td>PDF files</td><td>Private object storage</td><td>Keep file bytes out of localStorage and SQL rows.</td></tr></table>
+<p>NestJS is a good alternative if the team wants a more structured framework. Rewriting the UI in React is not required to connect a database.</p>
+<h1>4. MySQL design</h1><table><tr><th>Table</th><th>Fields and rules</th></tr>
+<tr><td>departments</td><td>id, name; one department has many employees.</td></tr>
+<tr><td>employees</td><td>id, employee_code, name, email, department_id, status, leave_balance; employee_code/email unique.</td></tr>
+<tr><td>users</td><td>id, employee_id, email, password_hash, role, is_active; unique email, hash only.</td></tr>
+<tr><td>sessions</td><td>id, user_id, expires_at; server can revoke session.</td></tr>
+<tr><td>attendance</td><td>id, employee_id, work_date, check_in_at, check_out_at, status; unique employee + work date.</td></tr>
+<tr><td>leave_requests</td><td>id, employee_id, type, start_date, end_date, days, status, reviewer_id, reviewed_at.</td></tr>
+<tr><td>holidays</td><td>id, holiday_date, name.</td></tr>
+<tr><td>payslips</td><td>id, employee_id, pay_month, storage_key, file_name; unique employee + month.</td></tr>
+<tr><td>audit_logs</td><td>id, actor_user_id, action, entity, created_at; track approvals and sensitive changes.</td></tr></table>
+<p>Use stable IDs and foreign keys, never employee names as identifiers. Update leave balance and request status in one transaction. Keep inactive employees instead of deleting historical records. Decide timezone, workday, holiday and missed-checkout rules.</p>
+<h1>5. API routes</h1><p>All routes use /api/v1 and return JSON. The server derives the user from the session; do not trust employeeId from the browser.</p>
+<table><tr><th>Feature</th><th>Routes</th><th>Scope</th></tr>
+<tr><td>Auth</td><td>POST /auth/login · POST /auth/logout · GET /auth/me</td><td>Other routes need session.</td></tr>
+<tr><td>Employees</td><td>GET/POST /employees · GET/PATCH /employees/:id</td><td>Admin all; manager own department; employee self.</td></tr>
+<tr><td>Attendance</td><td>GET /attendance?month=YYYY-MM · POST /attendance/check-in · POST /attendance/check-out</td><td>Self / department / company by role.</td></tr>
+<tr><td>Leave</td><td>GET/POST /leaves · POST /leaves/:id/approve · POST /leaves/:id/reject</td><td>Employee own; reviewer in scope.</td></tr>
+<tr><td>Reports</td><td>GET /dashboard/summary · GET /reports/attendance?month=YYYY-MM</td><td>Server filters by role.</td></tr>
+<tr><td>Holidays</td><td>GET/POST /holidays · PATCH /holidays/:id</td><td>Admin writes.</td></tr>
+<tr><td>Payslips</td><td>GET /payslips · POST /payslips · GET /payslips/:id/download</td><td>Employee own; admin upload/manage.</td></tr></table>
+<p>Use 400 invalid input, 401 unsigned in, 403 forbidden, 404 missing record and 409 duplicate/conflict.</p>
+<h1>6. Security and payslips</h1><ul>
+<li>Remove browser demo passwords before production. Seed first admin securely.</li><li>Hash passwords with Argon2id or bcrypt; never store plain passwords.</li><li>Use Secure + HttpOnly + SameSite cookies over HTTPS; expire/revoke sessions and add CSRF protection for writes.</li><li>Check role and record scope on every API request and download. Hiding a UI button is not security.</li><li>Rate-limit login; do not expose SQL details or stack traces.</li><li>Validate PDF size/type. Store PDF in a private bucket with a random key; store metadata in MySQL. Authorize every download.</li></ul>
+<h1>7. Connect existing frontend</h1><table><tr><th>Module</th><th>Change</th></tr>
+<tr><td>authService.js</td><td>Call login/logout/me; remove browser password lookup.</td></tr><tr><td>employeeService.js</td><td>Use API for list/create/update; backend owns permissions.</td></tr><tr><td>attendanceService.js</td><td>Fetch and mark check-in/out through API.</td></tr><tr><td>leaveService.js</td><td>Submit/review through API; backend updates balance.</td></tr><tr><td>reportService.js</td><td>Fetch role-scoped data for export.</td></tr><tr><td>store.js</td><td>Keep UI state only; localStorage no longer stores workflow truth.</td></tr><tr><td>payslipsView.js</td><td>Upload multipart PDF; request authorized download.</td></tr></table>
+<p>Add src/services/apiClient.js: shared fetch wrapper, credentials: include, JSON parsing, and common 401/403 handling. Use relative /api/v1 on same-origin hosting. Refresh from API after each saved change; show loading, success and error states.</p>
+<h1>8. Delivery plan</h1><table><tr><th>Phase</th><th>Work</th><th>Done when</th></tr>
+<tr><td>1. Agree rules</td><td>Roles, timezone, leave/attendance rules, file limits.</td><td>Rules written down.</td></tr><tr><td>2. API foundation</td><td>Express/TypeScript, dev MySQL, Prisma schema/migration.</td><td>API starts; schema migrates.</td></tr><tr><td>3. Identity + employees</td><td>Sessions, login, employee APIs and scope checks.</td><td>Roles cannot read outside scope.</td></tr><tr><td>4. Attendance + leave</td><td>Check-in/out, duplicate prevention, leave workflow and transactions.</td><td>Refresh shows saved data.</td></tr><tr><td>5. Files + reports</td><td>Private payslips, holidays, scoped reports.</td><td>Cross-employee download denied.</td></tr><tr><td>6. Production</td><td>HTTPS, secrets, migrations, backups, logs, rollback.</td><td>Backup restore tested.</td></tr></table>
+<h1>9. Suggested structure + launch checklist</h1><p><b>Backend:</b> server/src/app.ts · routes/ · controllers/ · services/ · middleware/ · schemas/ · db/ · prisma/schema.prisma · prisma/migrations/ · .env.example</p>
+<ul><li>Use least-privilege MySQL account and separate dev/staging/production databases.</li><li>Secure login before exposing employee data; reset demo credentials.</li><li>Map sample records to employee IDs if importing them.</li><li>Check duplicate check-in, unauthorized access, concurrent leave approval, upload limits and restore from backup.</li><li>Keep DATABASE_URL, SESSION_SECRET, APP_ORIGIN and storage settings in server secrets, never frontend code or Git.</li></ul>
+<h1>Final recommendation</h1><p>Keep the existing frontend; build a TypeScript + Express API with Prisma and MySQL, secure it with server-side sessions and role-based record checks, and store payslip PDFs privately. Replace localStorage one feature at a time. This is a proposed design based on the inspected repository; backend and production safeguards are not currently present.</p>
+</body></html>

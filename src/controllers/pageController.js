@@ -8,6 +8,7 @@ import { renderLeavePage, openLeave, updateSickDocumentRequirement, decision } f
 import { renderEmployeePage, openEmployee, editEmployee, viewEmployeeProfile, updateEmployeeStatus, removeEmployee } from './employeeController.js';
 import { renderReportsPage } from './reportController.js';
 import { renderPayslips } from '../views/payslipsView.js';
+import { renderTickets } from '../views/ticketsView.js';
 
 const pageMeta = {
   dashboard: ['Dashboard', 'Overview'],
@@ -46,7 +47,7 @@ function renderHolidaysPage() {
             ${state.data.holidays.map((holiday) => `
               <tr>
                 <td>${new Date(`${holiday.date}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
-                <td>${holiday.name}</td>
+                <td>${escapeHtml(holiday.name)}</td>
                 <td>${new Date(`${holiday.date}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'long' })}</td>
               </tr>
             `).join('')}
@@ -119,10 +120,10 @@ function renderEmployeeTable(list) {
         <tbody>
           ${list.map((employee) => `
             <tr>
-              <td>${employee.name}<div style="font-size:10px;color:var(--muted)">${employee.email}</div></td>
-              <td>${employee.id}</td>
-              <td>${employee.department}</td>
-              <td>${employee.role}</td>
+                <td>${escapeHtml(employee.name)}<div style="font-size:10px;color:var(--muted)">${escapeHtml(employee.email)}</div></td>
+                <td>${escapeHtml(employee.id)}</td>
+                <td>${escapeHtml(employee.department)}</td>
+                <td>${escapeHtml(employee.role)}</td>
               <td>${employee.balance} days</td>
               <td><button class="btn btn-secondary btn-sm" onclick="viewEmployeeProfile('${employee.id}')">View Profile</button></td>
               ${['Admin', 'Manager'].includes(state.session?.role) ? `<td><button class="btn btn-secondary btn-sm" onclick="editEmployee('${employee.id}')">Edit</button></td>` : ''}
@@ -167,8 +168,8 @@ function renderApprovalsPage() {
           <tbody>
             ${list.map((entry) => `
               <tr>
-                <td>${entry.employee}</td>
-                <td>${entry.type}</td>
+                <td>${escapeHtml(entry.employee)}</td>
+                <td>${escapeHtml(entry.type)}</td>
                 <td>${new Date(`${entry.from}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} - ${new Date(`${entry.to}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                 <td>${entry.days}${entry.lopDays ? ` (${entry.lopDays} LOP)` : ''}</td>
                 <td><span class="badge badge-${entry.status === 'Approved' ? 'success' : entry.status === 'Pending' ? 'warning' : 'danger'}">${entry.status}</span></td>
@@ -218,7 +219,7 @@ export function renderCurrentPage() {
     reports: renderReportsPage,
     payslips: renderPayslips,
     profile: renderProfilePage,
-    tickets: () => {}
+    tickets: renderTickets
   };
 
   const renderer = renderers[state.currentPage] || renderDashboardPage;

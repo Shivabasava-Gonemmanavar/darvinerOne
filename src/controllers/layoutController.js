@@ -6,6 +6,7 @@ export function buildNavigation() {
   if (!nav || !state.session) return;
 
   const items = [
+    ['tickets', '!', 'Issue Tickets'],
     ['dashboard', '▦', 'Dashboard'],
     ['attendance', '◷', state.session.role === 'Employee' ? 'My Attendance' : 'Attendance'],
     ['payslips', '▤', state.session.role === 'Admin' ? 'Salary Slips' : 'My Salary Slips'],

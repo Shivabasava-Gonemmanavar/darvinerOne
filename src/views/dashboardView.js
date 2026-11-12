@@ -40,10 +40,8 @@ function attendanceAction() {
   const employee = getCurrentEmployee();
   const record = state.data.attendance.find((entry) => entry.employee === employee.name && entry.date === getTodayISO());
 
-  if (record) {
-    return '<button class="btn btn-secondary" disabled>Marked at ' + record.checkIn + '</button>';
-  }
-
+  if (record?.checkOut) return '<button class="btn btn-secondary" disabled>Completed at ' + record.checkOut + '</button>';
+  if (record) return '<button class="btn btn-primary" onclick="markAttendance(\'check-out\')">Check Out · ' + record.checkIn + '</button>';
   return '<button class="btn btn-primary" onclick="markAttendance()">' + (state.session.role === 'Manager' ? 'Mark Manager Attendance' : 'Mark My Attendance') + '</button>';
 }
 

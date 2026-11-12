@@ -1,5 +1,6 @@
-import { state, saveData } from '../state/store.js';
+import { state } from '../state/store.js';
 import { getTodayISO } from '../utils/helpers.js';
+import { api, refreshBootstrap } from './apiClient.js';
 
 export function getMyAttendanceToday() {
   if (!state.session) return null;
@@ -9,34 +10,22 @@ export function getMyAttendanceToday() {
   return state.data.attendance.find((record) => record.employee === employee.name && record.date === getTodayISO()) || null;
 }
 
-export function markAttendance() {
+export async function markAttendance(mode = 'check-in') {
   if (!state.session) return { ok: false, message: 'No active session' };
 
   const employee = state.data.employees.find((item) => item.id === state.session.employeeId);
   if (!employee) return { ok: false, message: 'Employee not found' };
 
-  const existing = getMyAttendanceToday();
-  if (existing) {
-    return { ok: false, message: 'Attendance is already marked for today' };
-  }
-
-  const now = new Date();
-  const time = now.toLocaleTimeString('en-IN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  });
-
-  state.data.attendance.unshift({
-    date: getTodayISO(),
-    employee: employee.name,
-    status: 'Present',
-    checkIn: time,
-    checkOut: '--'
-  });
-
-  saveData();
-  return { ok: true, message: 'Attendance marked successfully' };
+  try {
+    if (mode === 'check-out') await api('/attendance/check-out', { method: 'POST' });
+    else {
+      const existing = getMyAttendanceToday();
+      if (existing) return { ok: false, message: 'Attendance is already marked for today' };
+      await api('/attendance/check-in', { method: 'POST' });
+    }
+    await refreshBootstrap();
+    return { ok: true, message: mode === 'check-out' ? 'Check-out recorded successfully' : 'Attendance marked successfully' };
+  } catch (error) { return { ok: false, message: error.message }; }
 }
 
 export function getAttendanceForCurrentUser() {

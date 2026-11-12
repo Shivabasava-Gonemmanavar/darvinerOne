@@ -16,10 +16,10 @@ export function showApp() {
   renderCurrentPage();
 }
 
-export function login() {
+export async function login() {
   const email = $('email').value.trim().toLowerCase();
   const password = $('password').value;
-  const result = loginUser({ email, password });
+  const result = await loginUser({ email, password });
 
   if (!result.ok) {
     const errorBox = $('loginError');
@@ -30,8 +30,8 @@ export function login() {
   showApp();
 }
 
-export function logout() {
-  logoutUser();
+export async function logout() {
+  await logoutUser();
 
   const appShell = $('appShell');
   const loginScreen = $('loginScreen');
@@ -99,19 +99,4 @@ export function bindAuthEvents() {
     }
   });
 
-  window.addEventListener('storage', (event) => {
-    if (event.key === 'workflowHR_v2' && event.newValue) {
-      state.data = JSON.parse(event.newValue);
-      if (state.session) renderCurrentPage();
-    }
-  });
-
-  window.addEventListener('storage', (event) => {
-    if (event.key === 'workflowUsers_v2' && event.newValue) {
-      state.users = JSON.parse(event.newValue);
-      if (state.session && !state.users.some((user) => user.employeeId === state.session.employeeId)) {
-        logout();
-      }
-    }
-  });
 }

@@ -1,13 +1,17 @@
-import { state, saveData } from '../state/store.js';
+import { state } from '../state/store.js';
 import { $, escapeHtml } from '../utils/helpers.js';
+import { api, refreshAndRender } from '../services/apiClient.js';
 
-function downloadSlip(slip) {
+async function downloadSlip(slip) {
+  const response = await api(`/payslips/${encodeURIComponent(slip.id)}/download`);
+  const objectUrl = URL.createObjectURL(await response.blob());
   const link = document.createElement('a');
-  link.href = slip.data;
+  link.href = objectUrl;
   link.download = slip.fileName || `Salary_Slip_${slip.month}.pdf`;
   document.body.appendChild(link);
   link.click();
   link.remove();
+  URL.revokeObjectURL(objectUrl);
 }
 
 export function renderPayslips() {
@@ -36,18 +40,20 @@ export function renderPayslips() {
       }).join('')}</tbody></table></div>` : '<div class="empty">No salary slips have been uploaded yet.</div>'}
     </div>`;
 
-  app.querySelectorAll('[data-download-slip]').forEach((button) => button.onclick = () => {
+  app.querySelectorAll('[data-download-slip]').forEach((button) => button.onclick = async () => {
     const slip = state.data.payslips.find((item) => item.id === button.dataset.downloadSlip);
-    if (slip) downloadSlip(slip);
+    if (slip) {
+      try { await downloadSlip(slip); }
+      catch (error) { window.toast?.(error.message); }
+    }
   });
   if (isAdmin) {
-    app.querySelectorAll('[data-delete-slip]').forEach((button) => button.onclick = () => {
-      state.data.payslips = state.data.payslips.filter((item) => item.id !== button.dataset.deleteSlip);
-      saveData();
-      renderPayslips();
+    app.querySelectorAll('[data-delete-slip]').forEach((button) => button.onclick = async () => {
+      try { await api(`/payslips/${encodeURIComponent(button.dataset.deleteSlip)}`, { method: 'DELETE' }); await refreshAndRender(); }
+      catch (error) { window.toast?.(error.message); }
     });
     const form = $('salarySlipForm');
-    form.onsubmit = (event) => {
+    form.onsubmit = async (event) => {
       event.preventDefault();
       const payload = new FormData(form);
       const file = payload.get('file');
@@ -55,18 +61,11 @@ export function renderPayslips() {
         window.alert('Please select a PDF salary slip.');
         return;
       }
-      const reader = new FileReader();
-      reader.onload = () => {
-        const employeeId = payload.get('employeeId');
-        const month = payload.get('month');
-        const existingIndex = state.data.payslips.findIndex((item) => item.employeeId === employeeId && item.month === month);
-        const slip = { id: `${employeeId}-${month}`, employeeId, month, fileName: file.name, data: reader.result };
-        if (existingIndex >= 0) state.data.payslips[existingIndex] = slip;
-        else state.data.payslips.push(slip);
-        saveData();
-        renderPayslips();
-      };
-      reader.readAsDataURL(file);
+      try {
+        await api('/payslips', { method: 'POST', body: payload });
+        await refreshAndRender();
+        window.toast?.('Salary slip uploaded');
+      } catch (error) { window.toast?.(error.message); }
     };
   }
 }

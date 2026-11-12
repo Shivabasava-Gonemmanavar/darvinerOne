@@ -7,8 +7,8 @@ export function renderDashboardPage() {
   renderDashboard();
 }
 
-export function markAttendanceHandler() {
-  const result = markAttendance();
+export async function markAttendanceHandler(mode = 'check-in') {
+  const result = await markAttendance(mode);
   if (!result.ok) {
     toast(result.message);
     return;

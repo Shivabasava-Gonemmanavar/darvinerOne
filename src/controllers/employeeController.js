@@ -21,7 +21,7 @@ export function openEmployee() {
         <div class="form-group"><label>Department</label><input name="department" required></div>
         <div class="form-group"><label>Role</label><select name="role"><option>Employee</option><option>Manager</option><option>Admin</option></select></div>
         <div class="form-group"><label>Email / Login ID</label><input name="email" type="email" required></div>
-        <div class="form-group"><label>Initial Password</label><input name="password" type="password" minlength="6" placeholder="Minimum 6 characters" required></div>
+      <div class="form-group"><label>Initial Password</label><input name="password" type="password" minlength="12" placeholder="Minimum 12 characters" required></div>
         <div class="form-group"><label>Phone Number</label><input name="phone" type="tel"></div>
         <div class="form-group"><label>Blood Group</label><input name="bloodGroup" placeholder="e.g. O+"></div>
         <div class="form-group full"><label>Address</label><input name="address"></div>
@@ -40,10 +40,10 @@ export function openEmployee() {
   const form = $('ef');
   if (!form) return;
 
-  form.onsubmit = (event) => {
+  form.onsubmit = async (event) => {
     event.preventDefault();
     const payload = new FormData(event.target);
-    const result = createEmployeeAccount({
+    const result = await createEmployeeAccount({
       id: payload.get('id'),
       name: payload.get('name'),
       department: payload.get('department'),
@@ -105,10 +105,10 @@ export function editEmployee(employeeId) {
   backdrop.classList.remove('hidden');
 
   const form = $('editEmployeeForm');
-  form.onsubmit = (event) => {
+  form.onsubmit = async (event) => {
     event.preventDefault();
     const payload = Object.fromEntries(new FormData(form).entries());
-    const result = updateEmployeeDetails(employeeId, payload);
+    const result = await updateEmployeeDetails(employeeId, payload);
     if (!result.ok) {
       toast(result.message);
       return;
@@ -151,8 +151,8 @@ export function viewEmployeeProfile(employeeId) {
   backdrop.classList.remove('hidden');
 }
 
-export function updateEmployeeStatus(employeeId, status) {
-  const result = updateAccountStatus(employeeId, status);
+export async function updateEmployeeStatus(employeeId, status) {
+  const result = await updateAccountStatus(employeeId, status);
   if (!result.ok) {
     toast(result.message);
     return;
@@ -162,10 +162,10 @@ export function updateEmployeeStatus(employeeId, status) {
   if (typeof renderCurrentPage === 'function') renderCurrentPage();
 }
 
-export function removeEmployee(employeeId) {
+export async function removeEmployee(employeeId) {
   if (!window.confirm('Delete this employee and their login account?')) return;
   const deletingCurrentUser = state.session?.employeeId === employeeId;
-  const result = removeEmployeeAccount(employeeId);
+  const result = await removeEmployeeAccount(employeeId);
   if (!result.ok) {
     toast(result.message);
     return;

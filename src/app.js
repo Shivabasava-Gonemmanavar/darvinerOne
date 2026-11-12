@@ -1,11 +1,12 @@
 import { state } from './state/store.js';
-import { $, toast } from './utils/helpers.js';
+import { $, toast, escapeHtml } from './utils/helpers.js';
 import { bindAuthEvents, login, logout, showApp } from './controllers/authController.js';
 import { setPage, renderCurrentPage } from './controllers/pageController.js';
 import { openLeave, updateSickDocumentRequirement, decision } from './controllers/leaveController.js';
 import { openEmployee, viewEmployeeProfile, updateEmployeeStatus, removeEmployee } from './controllers/employeeController.js';
 import { markAttendanceHandler } from './controllers/dashboardController.js';
 import { buildNavigation, renderHeader } from './controllers/layoutController.js';
+import { api, refreshBootstrap } from './services/apiClient.js';
 
 function openModal(content) {
   const modal = $('modal');
@@ -37,28 +38,28 @@ function openHoliday() {
   const form = $('hf');
   if (!form) return;
 
-  form.onsubmit = (event) => {
+  form.onsubmit = async (event) => {
     event.preventDefault();
     const data = new FormData(event.target);
-    state.data.holidays.push({
-      id: Date.now(),
-      date: data.get('date'),
-      name: data.get('name')
-    });
-    localStorage.setItem('workflowHR_v2', JSON.stringify(state.data));
+    try {
+      await api('/holidays', { method: 'POST', body: JSON.stringify({ date: data.get('date'), name: data.get('name') }) });
+      await refreshBootstrap();
+    } catch (error) { toast(error.message); return; }
     closeModal();
     toast('Holiday added');
     renderCurrentPage();
   };
 }
 
-function downloadMonthlyAttendanceReport(month) {
+async function downloadMonthlyAttendanceReport(month) {
   if (!month) {
     toast('Please select a report month');
     return;
   }
 
-  const records = state.data.attendance.filter((entry) => entry.date.startsWith(month));
+  let records;
+  try { records = (await api(`/reports/attendance?month=${encodeURIComponent(month)}`)).data; }
+  catch (error) { toast(error.message); return; }
   if (!records.length) {
     toast('No attendance records found for the selected month');
     return;
@@ -68,17 +69,18 @@ function downloadMonthlyAttendanceReport(month) {
     .sort((a, b) => a.date.localeCompare(b.date) || a.employee.localeCompare(b.employee))
     .map((entry) => `
       <tr>
-        <td>${entry.employee}</td>
-        <td>${(state.data.employees.find((person) => person.name === entry.employee) || {}).id || ''}</td>
-        <td>${(state.data.employees.find((person) => person.name === entry.employee) || {}).department || ''}</td>
-        <td>${entry.date}</td>
-        <td>${entry.status}</td>
-        <td>${entry.checkIn}</td>
-        <td>${entry.checkOut}</td>
+        <td>${escapeHtml(entry.employee)}</td>
+        <td>${escapeHtml(entry.employeeId || '')}</td>
+        <td>${escapeHtml(entry.department || '')}</td>
+        <td>${escapeHtml(entry.date)}</td>
+        <td>${escapeHtml(entry.status)}</td>
+        <td>${escapeHtml(entry.checkIn)}</td>
+        <td>${escapeHtml(entry.checkOut)}</td>
       </tr>
     `).join('');
 
-  const htmlReport = `<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:Arial}th,td{border:1px solid #bfc5d0;padding:8px;text-align:left}th{background:#4f46e5;color:#fff}h1{font-family:Arial;color:#172033}</style></head><body><h1>WorkFlow HR - Monthly Attendance Report</h1><p><b>Month:</b> ${month}<br><b>Scope:</b> All Employees<br><b>Generated:</b> ${new Date().toLocaleString('en-IN')}</p><table><thead><tr><th>Employee</th><th>Employee ID</th><th>Department</th><th>Date</th><th>Status</th><th>Check In</th><th>Check Out</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+  const reportScope = state.session?.role === 'Manager' ? 'Department' : state.session?.role === 'Employee' ? 'My records' : 'All Employees';
+  const htmlReport = `<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:Arial}th,td{border:1px solid #bfc5d0;padding:8px;text-align:left}th{background:#4f46e5;color:#fff}h1{font-family:Arial;color:#172033}</style></head><body><h1>WorkFlow HR - Monthly Attendance Report</h1><p><b>Month:</b> ${month}<br><b>Scope:</b> ${reportScope}<br><b>Generated:</b> ${new Date().toLocaleString('en-IN')}</p><table><thead><tr><th>Employee</th><th>Employee ID</th><th>Department</th><th>Date</th><th>Status</th><th>Check In</th><th>Check Out</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
 
   const blob = new Blob([htmlReport], { type: 'application/vnd.ms-excel' });
   const url = URL.createObjectURL(blob);
@@ -104,7 +106,7 @@ function downloadMonthlyLeaveReport(month) {
     }
     return state.session?.role === 'Admin';
   });
-  const rows = records.map((leave) => `<tr><td>${leave.employee}</td><td>${leave.type}</td><td>${leave.from}</td><td>${leave.to}</td><td>${leave.days}</td><td>${leave.lopDays || 0}</td><td>${leave.status}</td></tr>`).join('');
+  const rows = records.map((leave) => `<tr><td>${escapeHtml(leave.employee)}</td><td>${escapeHtml(leave.type)}</td><td>${escapeHtml(leave.from)}</td><td>${escapeHtml(leave.to)}</td><td>${Number(leave.days)}</td><td>${Number(leave.lopDays || 0)}</td><td>${escapeHtml(leave.status)}</td></tr>`).join('');
   const scope = state.session?.role === 'Manager' ? `${currentEmployee?.department || ''} Department` : 'All Employees';
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:Arial}th,td{border:1px solid #bfc5d0;padding:8px;text-align:left}th{background:#4f46e5;color:#fff}</style></head><body><h1>WorkFlow HR - Monthly Leave Report</h1><p>Month: ${month}<br>Scope: ${scope}</p><table><thead><tr><th>Employee</th><th>Leave Type</th><th>From</th><th>To</th><th>Working Days</th><th>LOP Days</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="7">No leave records found</td></tr>'}</tbody></table></body></html>`;
   const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
@@ -143,6 +145,12 @@ window.renderHeader = renderHeader;
 
 bindAuthEvents();
 
-if (state.session) {
+api('/auth/me').then(async ({ user }) => {
+  state.session = user;
+  await refreshBootstrap();
   showApp();
-}
+}).catch(() => {
+  state.session = null;
+  const loginScreen = $('loginScreen');
+  if (loginScreen) loginScreen.classList.remove('hidden');
+});
