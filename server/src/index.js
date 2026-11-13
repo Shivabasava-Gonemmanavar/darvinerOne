@@ -1,4 +1,5 @@
 import path from 'node:path';
+import os from 'node:os';
 import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +17,9 @@ import { MySQLSessionStore } from './mysqlSessionStore.js';
 dotenv.config({ path: 'server/.env' });
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '../..');
-const uploadRoot = path.resolve(projectRoot, process.env.UPLOAD_DIR || 'server/uploads');
+const uploadRoot = process.env.VERCEL
+  ? path.join(os.tmpdir(), 'workflow-hr-uploads')
+  : path.resolve(projectRoot, process.env.UPLOAD_DIR || 'server/uploads');
 await fs.mkdir(uploadRoot, { recursive: true });
 
 const app = express();
@@ -223,11 +226,16 @@ app.get('/api/v1/dashboard/summary',asyncRoute(async(req,res)=>{const scope=mana
 app.get('/api/v1/reports/attendance',asyncRoute(async(req,res)=>{const scope=managerScope(req.user,'e');const month=String(req.query.month||'');if(!/^\d{4}-\d{2}$/.test(month))return fail(res,400,'Month must use YYYY-MM.');const [rows]=await pool.execute(`SELECT a.*,e.name AS employee,e.employee_code,d.name AS department FROM attendance a JOIN employees e ON e.id=a.employee_id JOIN departments d ON d.id=e.department_id WHERE ${scope.sql} AND DATE_FORMAT(a.work_date,'%Y-%m')=? ORDER BY a.work_date,e.name`,[...scope.params,month]);res.json({data:rows.map(r=>({...attendanceView(r),employeeId:r.employee_code,department:r.department}))});}));
 
 app.use('/api/v1', (_req,res)=>fail(res,404,'API route not found.'));
-app.use('/src',express.static(path.join(projectRoot,'src'),{dotfiles:'deny',index:false}));
-app.get('/styles.css',(_req,res)=>res.sendFile(path.join(projectRoot,'styles.css')));
-app.get('/',(_req,res)=>res.sendFile(path.join(projectRoot,'index.html')));
+const staticRoot = process.env.VERCEL ? path.join(projectRoot, 'public') : projectRoot;
+app.use('/src',express.static(path.join(staticRoot,'src'),{dotfiles:'deny',index:false}));
+app.get('/styles.css',(_req,res)=>res.sendFile(path.join(staticRoot,'styles.css')));
+app.get('/',(_req,res)=>res.sendFile(path.join(staticRoot,'index.html')));
 app.get('*',(req,res,next)=>req.path.startsWith('/api/')?next():res.status(404).send('Not found'));
 app.use((error,_req,res,_next)=>{console.error(error);if(error instanceof multer.MulterError)return fail(res,400,error.code==='LIMIT_FILE_SIZE'?'File is too large.':'Invalid upload.');res.status(500).json({error:{message:prod?'A server error occurred.':error.message}});});
 
-const server=app.listen(port,()=>console.log(`WorkFlow HR is running at http://localhost:${port}`));
-for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>server.close(async()=>{sessionStore.close();await pool.end();process.exit(0);}));
+export default app;
+
+if (!process.env.VERCEL) {
+  const server=app.listen(port,()=>console.log(`WorkFlow HR is running at http://localhost:${port}`));
+  for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>server.close(async()=>{sessionStore.close();await pool.end();process.exit(0);}));
+}
